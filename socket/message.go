@@ -7,15 +7,10 @@ import (
 type MessageCode int
 
 const (
-	SYSTEM_MSG       MessageCode = 1
-	REGISTER         MessageCode = 2
-	LOGIN            MessageCode = 3
-	MATCH_PLAYER     MessageCode = 4
-	PLAY_GAME        MessageCode = 5
-	ROOM_NOTIFY      MessageCode = 6
-	PLAYER_PLAYCARD  MessageCode = 7
-	PLAYER_WANTDIZHU MessageCode = 8
-	ROOM_EXIT         MessageCode = 9
+	MATCH_PLAYER     MessageCode = 1
+	PLAY_GAME        MessageCode = 2
+	PLAYER_PLAYCARD  MessageCode = 3
+	ROOM_EXIT         MessageCode = 4
 )
 
 type Message struct {

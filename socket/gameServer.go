@@ -47,9 +47,6 @@ func (gameServer *GameServer) handleMsg(client *Client, message *Message) {
 	case PLAYER_PLAYCARD: // 一局游戏内消息，每一项单独处理
 		gameServer.playGame(client, message)
 		break
-	case PLAYER_WANTDIZHU: // 抢地主消息
-		gameServer.wantDizhu(client, message)
-		break
 	}
 }
 
@@ -133,20 +130,6 @@ func (gameServer *GameServer) playGame(client *Client, message *Message) {
 
 	room := gameServer.rooms[commonRoomCommand.RoomId]
 	room.handlePlayCard(message)
-}
-
-// 抢地主消息
-func (gameServer *GameServer) wantDizhu(client *Client, message *Message) {
-	commonRoomCommand := game.CommonRoomCommand{}
-	err := json.Unmarshal(message.Content, &commonRoomCommand)
-
-	//解析失败会报错。
-	if err != nil {
-		return
-	}
-
-	room := gameServer.rooms[commonRoomCommand.RoomId]
-	room.handleWantDizhu(message)
 }
 
 // 退出队列

@@ -120,12 +120,6 @@ func (roomServer *RoomServer) changeState(state int) {
 		stateChangeCommand.Scores = roomServer.scores
 		msg.Command = PLAY_GAME
 		break;
-	case 3:
-		roomServer.curPlayerIndex = rand.Intn(3) + 1
-		stateChangeCommand.CurPlayerIndex = roomServer.curPlayerIndex
-		stateChangeCommand.NowScore = 0
-		msg.Command = PLAYER_WANTDIZHU
-		break;
 	default:
 		return;
 	}
@@ -332,66 +326,6 @@ func (roomServer *RoomServer) countScore(winIndex int) {
 	}
 }
 
-// 处理抢地主消息
-func (roomServer *RoomServer) handleWantDizhu(message *Message) {
-	seq := message.Seq
-
-	wantDizhuCommand := game.WantDizhuInputCommand{}
-
-	// Todo: 发送错误返回？
-	err := json.Unmarshal(message.Content, &wantDizhuCommand)
-	if err != nil {
-		return
-	}
-
-	score := wantDizhuCommand.Score
-	index := wantDizhuCommand.Index
-	roomServer.wantDizhuTimes++;
-
-	// 发送ack
-	roomServer.sendAck(PLAYER_WANTDIZHU, index, seq, 0)
-
-	if (score == 3) { // 直接喊3分，成为地主
-		roomServer.dizhuScore = score
-
-		roomServer.giveDzCards(index - 1)
-		roomServer.dizhu = index
-		roomServer.curPlayerIndex = index
-		// 告知地主结果
-		roomServer.notifyDizhuResult()
-
-		// 状态变更
-		roomServer.changeState(1)
-		return
-	} else if (score > roomServer.dizhuScore) { // 叫了个更高分，更新
-		roomServer.dizhuScore = score
-		roomServer.dizhu = index
-	}
-
-	// 如果是第三次，表示每个人都表过态了
-	if (roomServer.wantDizhuTimes == 3) {
-		roomServer.giveDzCards(roomServer.dizhu - 1)
-		roomServer.curPlayerIndex = roomServer.dizhu
-		// 告知地主结果
-		roomServer.notifyDizhuResult()
-
-		// 状态变更
-		roomServer.changeState(1)
-	} else { // 继续问下一个人
-		roomServer.addCurIndex()
-
-		command := game.WantDizhuOutputCommand{
-			State: 3,
-			CurPlayerIndex: roomServer.curPlayerIndex,
-			NowScore: roomServer.dizhuScore,
-		}
-		msg := Message{}
-
-		msg.Command = PLAYER_WANTDIZHU
-		msg.Content, _ = json.Marshal(command)
-		roomServer.sendToRoomPlayers(msg)
-	}
-}
 
 // 下一个座位
 func (roomServer *RoomServer) addCurIndex() {
@@ -406,21 +340,6 @@ func (roomServer *RoomServer) giveDzCards(index int) {
 	for i := 0; i < 3; i++ {
 		roomServer.playerCards[index][17 + i] = roomServer.dzCards[i]
 	}
-}
-
-// 通知抢地主结果
-func (roomServer *RoomServer) notifyDizhuResult() {
-	dizhuResultCommand := game.DizhuResultCommand{
-		State: 3,
-		Dizhu: roomServer.curPlayerIndex,
-		DizhuCards: roomServer.dzCards[0:],
-		NowScore: roomServer.dizhuScore,
-	}
-
-	msg := Message{}
-	msg.Command = PLAYER_WANTDIZHU
-	msg.Content, _ = json.Marshal(dizhuResultCommand)
-	roomServer.sendToRoomPlayers(msg)
 }
 
 // 给房间内单个用户发送消息
