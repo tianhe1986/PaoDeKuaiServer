@@ -1,7 +1,7 @@
 package socket
 
 import (
-	"Doudizhu-server-go/game"
+	"PaoDeKuaiServer/game"
 	"container/list"
 	"encoding/json"
 	"log"

@@ -39,27 +39,6 @@ type CommonRoomCommand struct {
 	Index int `json:"index"`
 }
 
-// 接收到的抢地主消息
-type WantDizhuInputCommand struct {
-	RoomId int `json:"roomId"`
-	Index int `json:"index"`
-	Score int `json:"score"`
-}
-
-type WantDizhuOutputCommand struct {
-	State int `json:"state"`
-	CurPlayerIndex int `json:"curPlayerIndex"`
-	NowScore int `json:"nowScore"`
-}
-
-// 抢地主结果消息
-type DizhuResultCommand struct {
-	State int `json:"state"`
-	Dizhu int `json:"dizhu"`
-	DizhuCards []int `json:"dizhuCards"`
-	NowScore int `json:"nowScore"`
-}
-
 // 玩家上传的出牌消息
 type PlayCardInCommand struct {
 	RoomId int `json:"roomId"`

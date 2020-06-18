@@ -1,7 +1,7 @@
 package socket
 
 import (
-	"Doudizhu-server-go/game"
+	"PaoDeKuaiServer/game"
 	"encoding/json"
 	"math/rand"
 	"time"
@@ -23,25 +23,13 @@ type RoomServer struct {
 	players []RoomPlayItem
 
 	// 三位玩家手中的牌
-	playerCards [3][20]int
+	playerCards [3][17]int
 
-	// 底牌
-	dzCards [3]int
-
-	// 当前抢地主/出牌玩家
+	// 当前出牌玩家
 	curPlayerIndex int
 
 	// 当前最大牌情况，牌型，牌型中的头牌，具体牌
 	curCard game.CardSet
-
-	// 地主座位
-	dizhu int
-
-	// 抢地主到几分了
-	dizhuScore int
-
-	// 当前已经抢地主次数
-	wantDizhuTimes int
 
 	// 当前由于炸弹而翻倍的次数
 	bombTimes int
@@ -51,6 +39,9 @@ type RoomServer struct {
 
 	// 当前有几个人过牌
 	passNum int
+
+	// 罚分情况
+	punishScores map[int]int
 
 	// 得分情况
 	scores map[int]int
@@ -63,25 +54,44 @@ func NewRoomServer() *RoomServer {
 		pokerLogic: &game.PokerLogic{},
 		players: make([]RoomPlayItem, 3),
 		curCard: game.CardSet{
-			Type: game.NO_CARDS,
+			Type: game.INIT,
 			Header: 0,
 			Cards: nil,
 		},
+		punishScores: make(map[int]int),
 		scores: make(map[int]int),
 	}
 }
 
 func (roomServer *RoomServer) InitGame() {
+	// 一开始没有罚分
+	for i := 1; i < 4; i++ {
+		roomServer.punishScores[i] = 0
+	}
+
 	// 发牌
-	cards := roomServer.getNewCards54()
+	cards := roomServer.getNewCards51()
+
+	// 发牌的同时, 记录首个出牌人的位置
+	firstIndex := 0
+
 	for i := 0; i < 17; i++ {
 		roomServer.playerCards[0][i] = cards[i]
 		roomServer.playerCards[1][i] = cards[i + 17]
 		roomServer.playerCards[2][i] = cards[i + 34]
-	}
 
-	for i := 0; i < 3; i++ {
-		roomServer.dzCards[i] = cards[i + 51]
+		if (firstIndex != 0) {
+			continue
+		}
+
+		// 红桃3出头
+		if (cards[i] == 1) {
+			firstIndex = 1
+		} else if (cards[i + 17] == 1) {
+			firstIndex = 2
+		} else if (cards[i + 34] == 1) {
+			firstIndex = 3
+		}
 	}
 
 	// 将牌消息发送给客户端
@@ -101,10 +111,11 @@ func (roomServer *RoomServer) InitGame() {
 		roomServer.players[i].ws.send  <- tempMsg
 	}
 
-	roomServer.changeState(3)
+	roomServer.curPlayerIndex = firstIndex
+	roomServer.changeState(1)
 }
 
-// 状态变更  2是结算，1是游戏中, 3是抢地主
+// 状态变更  2是结算，1是游戏中
 func (roomServer *RoomServer) changeState(state int) {
 	stateChangeCommand := game.StateChangeCommand{
 		State: state,
@@ -165,7 +176,8 @@ func (roomServer *RoomServer) handlePlayCard(message *Message) {
 		}
 
 		// 是否可出牌检查
-		if ! roomServer.pokerLogic.CanOut(&curCard, &roomServer.curCard) {
+		handCardNum := roomServer.getHandCardNum(index - 1)
+		if ! roomServer.pokerLogic.CanOut(&curCard, &roomServer.curCard, handCardNum) {
 			//log.Printf("当前牌型为 %d, 头牌为 %d", roomServer.curCard.Type, roomServer.curCard.Header)
 			//log.Printf("新来的牌型为 %d, 头牌为 %d", curCard.Type, curCard.Header)
 			roomServer.sendAck(PLAYER_PLAYCARD, index, seq, -3)
@@ -178,12 +190,14 @@ func (roomServer *RoomServer) handlePlayCard(message *Message) {
 			roomServer.sendAck(PLAYER_PLAYCARD, index, seq, -1)
 			return
 		}
+	} else {
+		// TODO: 有大牌不出, 罚分, 骂得脑壳搭起
 	}
 
 	// 告知玩家出牌成功
 	roomServer.sendAck(PLAYER_PLAYCARD, index, seq, 0)
 
-	if curCard.Type != game.PASS_CARDS { // 如果不是过牌，处理新的最大牌
+	if curCard.Type != game.PASSED { // 如果不是过牌，处理新的最大牌
 		roomServer.curCard = curCard
 		roomServer.passNum = 0
 
@@ -203,7 +217,7 @@ func (roomServer *RoomServer) handlePlayCard(message *Message) {
 			roomServer.passNum = 0
 			roomServer.curPlayerIndex = roomServer.nowBigger
 			roomServer.curCard = game.CardSet{
-				Type: game.NO_CARDS,
+				Type: game.INIT,
 				Header: 0,
 				Cards: nil,
 			}
@@ -211,6 +225,21 @@ func (roomServer *RoomServer) handlePlayCard(message *Message) {
 			roomServer.sendNextCardOut()
 		}
 	}
+}
+
+// 获取手牌数
+func (roomServer *RoomServer) getHandCardNum(index int) int {
+	cardGroup := &roomServer.playerCards[index]
+
+	cardNum := 0
+
+	for j := 0; j < 17; j++ {
+		if (0 != cardGroup[j]) { // 清除对应的牌
+			cardNum++
+		}
+	}
+
+	return cardNum
 }
 
 func (roomServer *RoomServer) sendAck(command MessageCode, index int, seq int, code int) {
@@ -224,7 +253,7 @@ func (roomServer *RoomServer) sendAck(command MessageCode, index int, seq int, c
 
 func (roomServer *RoomServer) sendPassMsg() {
 	passCurCard := game.CardSet{
-		Type: game.PASS_CARDS,
+		Type: game.PASSED,
 		Header: 0,
 		Cards: nil,
 	}
@@ -262,7 +291,7 @@ func (roomServer *RoomServer) removeCards(index int, cards []int) bool {
 	for i, length := 0, len(cards); i < length; i++ {
 		haveHard = false
 
-		for j := 0; j < 20; j++ {
+		for j := 0; j < 17; j++ {
 			if (cards[i] == cardGroup[j]) { // 清除对应的牌
 				haveHard = true
 				cardGroup[j] = 0
@@ -277,7 +306,7 @@ func (roomServer *RoomServer) removeCards(index int, cards []int) bool {
 
 	// 检查是否出完牌了
 	hasOut := true
-	for j := 0; j < 20; j++ {
+	for j := 0; j < 17; j++ {
 		if (0 != cardGroup[j]) {
 			hasOut = false
 			break
@@ -295,14 +324,7 @@ func (roomServer *RoomServer) removeCards(index int, cards []int) bool {
 
 // 算分
 func (roomServer *RoomServer) countScore(winIndex int) {
-	// 喊地主分
-	score := roomServer.dizhuScore
-
-	// 翻倍
-	for i := 0; i < roomServer.bombTimes; i++ {
-		score = score * 2
-	}
-
+	// 先算正常剩余牌数, 每张牌1分, 报停则不算
 	other1 := winIndex - 1
 	if (other1 == 0) {
 		other1 = 3
@@ -313,16 +335,34 @@ func (roomServer *RoomServer) countScore(winIndex int) {
 		other2 = 1
 	}
 
-	dizhu := roomServer.dizhu
-	if (winIndex == dizhu) { // 胜者是地主
-		roomServer.scores[other1] = -score
-		roomServer.scores[other2] = -score
-		roomServer.scores[dizhu] = 2 * score
-	} else {
-		roomServer.scores[other1] = score
-		roomServer.scores[other2] = score
-		roomServer.scores[winIndex] = score
-		roomServer.scores[dizhu] = -2 * score
+	other1Score := 0
+	other2Score := 0
+
+	for j := 0; j < 17; j++ {
+		if (0 != roomServer.playerCards[other1 - 1][j]) {
+			other1Score++;
+		}
+
+		if (0 != roomServer.playerCards[other2 - 1][j]) {
+			other2Score++;
+		}
+	}
+
+	if (other1Score == 1) {
+		other1Score = 0
+	}
+
+	if (other2Score == 1) {
+		other2Score = 0
+	}
+
+	roomServer.scores[other1] = -other1Score
+	roomServer.scores[other2] = -other2Score
+	roomServer.scores[winIndex] = other1Score + other2Score
+
+	// 加上罚分
+	for i := 1; i < 4; i++ {
+		roomServer.scores[i] -= roomServer.punishScores[i]
 	}
 }
 
@@ -332,13 +372,6 @@ func (roomServer *RoomServer) addCurIndex() {
 	roomServer.curPlayerIndex++;
 	if (roomServer.curPlayerIndex > 3) {
 		roomServer.curPlayerIndex = 1; //每次到4就变回1
-	}
-}
-
-// 将底牌给地主
-func (roomServer *RoomServer) giveDzCards(index int) {
-	for i := 0; i < 3; i++ {
-		roomServer.playerCards[index][17 + i] = roomServer.dzCards[i]
 	}
 }
 
@@ -367,17 +400,18 @@ func (roomServer *RoomServer) exit() {
 	roomServer.sendToRoomPlayers(msg)
 }
 
-// 拿到一副新好的牌
-func (roomServer *RoomServer) getNewCards54() []int {
-	cards := make([]int, 54)
-	for i := 0; i < 54; i++ {
+// 拿到一副新好的牌, 没有大小王, 并且移除一个2
+func (roomServer *RoomServer) getNewCards51() []int {
+	totalCardNum := 51
+	cards := make([]int, totalCardNum)
+	for i := 0; i < totalCardNum; i++ {
 		cards[i] = i + 1
 	}
 
 	rand.Seed(time.Now().UnixNano())
 
 	// 洗牌算法
-	for i := 53; i >= 0; i-- {
+	for i := totalCardNum - 1; i >= 0; i-- {
 		j := rand.Intn(i + 1)
 		if i != j {
 			temp := cards[i]

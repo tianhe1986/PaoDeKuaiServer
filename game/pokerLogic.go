@@ -15,110 +15,47 @@ func (p *PokerLogic) CalcuPokerType(cards []int) CardType {
 	length := len(points)
 
 	if length == 1 { // 一张牌，当然是单牌
-		return SINGLE_CARD
+		return SINGLE
 	} else if length == 2 { // 两张牌，王炸或一对
-		if points[0] == 16 && points[1] == 17 { // 王炸
-			return KINGBOMB_CARD
-		}
 		if points[0] == points[1] { // 对子
-			return DOUBLE_CARD
+			return DOUBLE
 		}
-	} else if length == 3 { // 三张，只检查三不带
-		if points[0] == points[1] && points[1] == points[2] {
-			return THREE_CARD
-		}
-	} else if length == 4 { // 四张，炸弹或三带一
+	} else if length == 4 { // 姊妹对， 3带1， 炸弹
 		maxSameNum := p.CalcuMaxSameNum(points)
+		diffNum := p.CalcuDiffPoint(points)
 		if maxSameNum == 4 { // 四张相同，炸弹
-			return BOMB_CARD
-		}
-
-		if maxSameNum == 3 { // 三张点数相同的，3带1
-			return THREE_ONE_CARD
+			return BOMB
+		} else if maxSameNum == 3 { // 三张点数相同的，3带1
+			return THREE_ONE
+		} else if maxSameNum == 2 && diffNum == 2 && points[0] + 1 == points[3] && points[3] < 15 { // 两种点数，最多有两张一样的，且点数相连，姊妹对
+			return CONNECT_DOUBLE;
 		}
 	} else if length >= 5 && p.IsStraight(points) && points[length - 1] < 15 { // 大于等于5张，是点数连续，且最大点数不超过2， 则是顺子
 		return STRAIGHT
 	} else if length == 5 { // 5张，只需检查3带2
-		// 最多有3张相等的，且只有两种点数，则是3带2
-		if p.CalcuMaxSameNum(points) == 3 && p.CalcuDiffPoint(points) == 2 {
-			return THREE_TWO_CARD
+		// 最多有3张相等的
+		if p.CalcuMaxSameNum(points) == 3 {
+			return THREE_TWO
 		}
-	} else { // 大于6的情况，再分别判断
+	} else { // 大于6的情况，姊妹对或连续三带二
 		maxSameNum := p.CalcuMaxSameNum(points)
 		diffPointNum := p.CalcuDiffPoint(points)
 
-		// length能被3整除， 最大相同数量是3， 不同点数是length/3, 且最大与最小点数相差 length/3 - 1， 则是连续三张
-		if length % 3 == 0 && maxSameNum == 3 && diffPointNum == length / 3 && (points[length - 1] - points[0] == length/3 - 1) && points[length - 1] < 15 {
-			return AIRCRAFT
+		if length % 2 == 0 && maxSameNum == 2 && diffPointNum == length / 2 && (points[length - 1] - points[0] == length / 2 - 1) && points[length - 1] < 15 { //姊妹对
+			return CONNECT_DOUBLE;
 		}
 
-		// 与上面连续三张判断类似，连对
-		if length % 2 == 0 && maxSameNum == 2 && diffPointNum == length / 2 && (points[length - 1] - points[0] == length/2 - 1) && points[length - 1] < 15 {
-			return CONNECT_CARD
-		}
-
-		// 飞机三带一
-		if length % 4 == 0 {
-			// 连续3张的数量占了length/4 以上
-			threePoints := p.GetSameNumMaxStraightPoints(points, 3)
-			if len(threePoints) >= length/4 && threePoints[length/4 - 1] < 15 {
-				return AIRCRAFT_CARD
-			}
-		}
-
-		// 飞机三带二
-		if length % 5 == 0 {
-			threePoints := p.GetSameNumPoints(points, 3)
-			// 三带二里面，不会出现单牌的情况
-			onePoints := p.GetSameNumPoints(points, 1)
-			if len(onePoints) == 0 && len(threePoints) == length/5 && p.IsStraight(threePoints) && threePoints[len(threePoints) - 1] < 15 {
-				return AIRCRAFT_WING
-			}
-		}
-
-		// 四带二
-		if length == 6 {
-			if maxSameNum == 4 {
-				return BOMB_TWO_CARD
-			}
-		}
-
-		// 四带两对
-		if length == 8 {
-			if maxSameNum == 4 {
-				// 必须没有一张和三张的出现
-				onePoints := p.GetSameNumPoints(points, 1)
-				threePoints := p.GetSameNumPoints(points, 3)
-
-				// TODO： 33334444 这样的到底算连续三带一还是四带两对？
-				if len(onePoints) == 0 && len(threePoints) == 0 {
-					return BOMB_FOUR_CARD
-				}
-			}
-		}
-		// 连续四带二
-		if length % 6 == 0 {
-			fourPoints := p.GetSameNumMaxStraightPoints(points, 4)
-			if len(fourPoints) >= length/6 && fourPoints[length/6 - 1] < 15 {
-				return BOMB_TWO_STRAIGHT_CARD
-			}
-		}
-		// 连续四带两对
-		if length % 8 == 0 {
-			fourPoints := p.GetSameNumMaxStraightPoints(points, 4)
-
-			// 其他的都必须是成对，因此检查是否没有单张和三张的出现即可
-			onePoints := p.GetSameNumPoints(points, 1)
-			threePoints := p.GetSameNumPoints(points, 3)
-
-			if len(fourPoints) >= length/8 && len(onePoints) == 0 && len(threePoints) == 0 && fourPoints[length/8 - 1] < 15 {
-				return BOMB_FOUR_STRAIGHT_CARD
+		if length % 5 == 0 { // 连续三带二
+			// 找出点数出现大于等于3次的最长递增点数列表，如果此列表长度大于等于 len / 5且最靠前的一段不会到2，则可以
+			threeCards := p.GetSameNumMaxStraightPoints(points, 3);
+			if (len(threeCards) >= length / 5 && threeCards[length / 5 - 1] < 15) {
+				return CONNECT_THREE_TWO;
 			}
 		}
 	}
 
 	// 没有这个牌型的
-	return ERROR_CARDS
+	return ERROR
 }
 
 // 取出所有点数数量等于num的点数
@@ -303,21 +240,20 @@ func (p *PokerLogic) CalcuPokerHeader(cards []int, cardType CardType) int {
 	points := p.CardsToPoints(cards)
 
 	switch cardType {
-	case SINGLE_CARD, DOUBLE_CARD, THREE_CARD, STRAIGHT, CONNECT_CARD, AIRCRAFT, BOMB_CARD:
+	case SINGLE, DOUBLE, CONNECT_DOUBLE, STRAIGHT, BOMB:
 		return points[0]
-	case THREE_ONE_CARD,THREE_TWO_CARD,BOMB_TWO_CARD:
+	case THREE_ONE,THREE_TWO:
 		return points[2]
-	case AIRCRAFT_CARD: // 连续三带一
-		threePoints := p.GetSameNumMaxStraightPoints(points, 3)
-		return threePoints[0]
-	case AIRCRAFT_WING: // 连续三带二
-		return p.FirstPoint(points, 3)
-	case BOMB_FOUR_CARD: // 四带两对
-		fourPoints := p.GetSameNumPoints(points, 4)
-		return fourPoints[len(fourPoints) - 1]
-	case BOMB_TWO_STRAIGHT_CARD,BOMB_FOUR_STRAIGHT_CARD:
-		fourPoints := p.GetSameNumMaxStraightPoints(points, 4)
-		return fourPoints[0]
+	case CONNECT_THREE_TWO:
+		length := len(points) / 5
+		threeCards := p.GetSameNumMaxStraightPoints(points, 3)
+		endIndex := len(threeCards) - 1
+		for ; endIndex >= length - 1; endIndex-- {
+			if threeCards[endIndex] < 15 {
+				break
+			}
+		}
+		return threeCards[endIndex - length + 1]
 	}
 
 	return 0
@@ -347,29 +283,28 @@ func (p *PokerLogic) FirstPoint(points []int, num int) int {
 }
 
 // 是否可以出牌
-func (p *PokerLogic) CanOut(newCardSet *CardSet, nowCardSet *CardSet) bool {
+func (p *PokerLogic) CanOut(newCardSet *CardSet, nowCardSet *CardSet, handCardNum int) bool {
 	// 当前是第一次出牌，牌型正确即可
-	if nowCardSet.Type == NO_CARDS && newCardSet.Type != ERROR_CARDS {
-		return true
-	}
-
-	// 王炸，天下第一
-	if newCardSet.Type == KINGBOMB_CARD {
+	if nowCardSet.Type == INIT && newCardSet.Type != ERROR {
+		// 三带一要特殊处理,必须是最后才能出
+		if newCardSet.Type == THREE_ONE {
+			return handCardNum == 4
+		}
 		return true
 	}
 
 	// 炸弹，检查前面是不是也是炸弹
-	if newCardSet.Type == BOMB_CARD {
-		if nowCardSet.Type == BOMB_CARD {
+	if newCardSet.Type == BOMB {
+		if nowCardSet.Type == BOMB {
 			return newCardSet.Header > nowCardSet.Header
-		} else {
+		} else { // 炸得喵呜喵呜
 			return true
 		}
-	}
-
-	// 同类型，张数相同，头牌更大
-	if newCardSet.Type == nowCardSet.Type && len(newCardSet.Cards) == len(nowCardSet.Cards) && newCardSet.Header > nowCardSet.Header {
-		return true
+	} else {
+		// 同类型，张数相同，头牌更大
+		if newCardSet.Type == nowCardSet.Type && len(newCardSet.Cards) == len(nowCardSet.Cards) && newCardSet.Header > nowCardSet.Header {
+			return true
+		}
 	}
 
 	return false
