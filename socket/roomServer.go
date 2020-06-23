@@ -191,7 +191,17 @@ func (roomServer *RoomServer) handlePlayCard(message *Message) {
 			return
 		}
 	} else {
-		// TODO: 有大牌不出, 罚分, 骂得脑壳搭起
+		handCard := roomServer.getHandCard(index - 1)
+
+		largeCardSet := roomServer.pokerLogic.GetLargerCardSet(handCard, &roomServer.curCard)
+
+		if largeCardSet != nil { // 有大牌不出
+			// 强制溺死，罚分，看你打个鸟
+			roomServer.removeCards(index - 1, largeCardSet.Cards)
+			punishScore := len(largeCardSet.Cards) * 2
+			roomServer.punishScores[index - 1] += punishScore
+			roomServer.sendPunishCommand(index, punishScore, *largeCardSet)
+		}
 	}
 
 	// 告知玩家出牌成功
@@ -225,6 +235,24 @@ func (roomServer *RoomServer) handlePlayCard(message *Message) {
 			roomServer.sendNextCardOut()
 		}
 	}
+}
+
+// 获取手牌
+func (roomServer *RoomServer) getHandCard(index int) []int {
+	var handCard [17]int;
+
+	cardGroup := &roomServer.playerCards[index]
+
+	cardNum := 0
+
+	for j := 0; j < 17; j++ {
+		if (0 != cardGroup[j]) {
+			handCard[cardNum] = cardGroup[j]
+			cardNum++
+		}
+	}
+
+	return handCard[0:cardNum]
 }
 
 // 获取手牌数
@@ -280,6 +308,21 @@ func (roomServer *RoomServer) sendNextCardOut() {
 	msg := Message{}
 	msg.Command = PLAY_GAME
 	msg.Content, _ = json.Marshal(cardOutCommand)
+	roomServer.sendToRoomPlayers(msg)
+}
+
+// 发送罚分消息
+func (roomServer *RoomServer) sendPunishCommand(seat int, score int, punishCard game.CardSet) {
+	punishCommand := game.PunishCommand{
+		State: 4,
+		Seat: seat,
+		Score: score,
+		PunCard: punishCard,
+	}
+
+	msg := Message{}
+	msg.Command = PLAY_GAME
+	msg.Content, _ = json.Marshal(punishCommand)
 	roomServer.sendToRoomPlayers(msg)
 }
 

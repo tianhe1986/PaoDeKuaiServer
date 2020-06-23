@@ -52,3 +52,11 @@ type CardOutCommand struct {
 	CurPlayerIndex int `json:"curPlayerIndex"`
 	CurCard CardSet `json:"curCard"`
 }
+
+// 罚分消息
+type PunishCommand struct {
+	State int `json:"state"` // state = 4 表示罚分
+	Seat int `json:"seat"` // 被罚的座位
+	Score int `json:"score"` // 被罚的分数
+	PunCard CardSet `json:"punCard"` // 被罚丢弃的牌
+}
