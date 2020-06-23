@@ -314,7 +314,7 @@ func (roomServer *RoomServer) sendNextCardOut() {
 // 发送罚分消息
 func (roomServer *RoomServer) sendPunishCommand(seat int, score int, punishCard game.CardSet) {
 	punishCommand := game.PunishCommand{
-		State: 4,
+		State: 3,
 		Seat: seat,
 		Score: score,
 		PunCard: punishCard,
